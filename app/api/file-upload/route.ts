@@ -1,8 +1,9 @@
 import type { NextRequest } from 'next/server'
-import { client, getInfo } from '@/app/api/utils/common'
+import { getClient, getInfo } from '@/app/api/utils/common'
 
 export async function POST(request: NextRequest) {
   try {
+    const client = getClient(request)
     const formData = await request.formData()
     const { user } = getInfo(request)
     formData.append('user', user)

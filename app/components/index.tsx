@@ -6,6 +6,7 @@ import produce, { setAutoFreeze } from 'immer'
 import { useBoolean, useGetState } from 'ahooks'
 import useConversation from '@/hooks/use-conversation'
 import Toast from '@/app/components/base/toast'
+import AgentPanel from '@/app/components/agent-panel'
 import Sidebar from '@/app/components/sidebar'
 import ConfigSence from '@/app/components/config-scence'
 import Header from '@/app/components/header'
@@ -19,9 +20,17 @@ import useBreakpoints, { MediaType } from '@/hooks/use-breakpoints'
 import Loading from '@/app/components/base/loading'
 import { replaceVarWithValues, userInputsFormToPromptVariables } from '@/utils/prompt'
 import AppUnavailable from '@/app/components/app-unavailable'
-import { API_KEY, APP_ID, APP_INFO, isShowPrompt, promptTemplate } from '@/config'
+import { AGENT_CONFIGS, APP_INFO, isShowPrompt, promptTemplate } from '@/config'
 import type { Annotation as AnnotationType } from '@/types/log'
+import { getSelectedAgent, getStoredSelectedAgentAppId, setStoredSelectedAgentAppId } from '@/utils/agent'
 import { addFileInfos, sortAgentSorts } from '@/utils/tools'
+
+const DEFAULT_VISION_CONFIG: VisionSettings = {
+  enabled: false,
+  number_limits: 2,
+  detail: Resolution.low,
+  transfer_methods: [TransferMethod.local_file],
+}
 
 export interface IMainProps {
   params: any
@@ -31,7 +40,14 @@ const Main: FC<IMainProps> = () => {
   const { t } = useTranslation()
   const media = useBreakpoints()
   const isMobile = media === MediaType.mobile
-  const hasSetAppConfig = APP_ID && API_KEY
+  const [selectedAgentAppId, setSelectedAgentAppId] = useState<string>('')
+  const [isAgentSelectionReady, setIsAgentSelectionReady] = useState(false)
+  const [isAgentPanelCollapsed, setIsAgentPanelCollapsed] = useState(false)
+
+  const selectedAgent = getSelectedAgent(selectedAgentAppId)
+  const currentAppId = selectedAgent?.appId || ''
+  const hasSetAppConfig = !!selectedAgent?.appId && !!selectedAgent?.apiKey
+  const hasMultipleAgents = AGENT_CONFIGS.length > 1
 
   /*
   * app info
@@ -42,17 +58,19 @@ const Main: FC<IMainProps> = () => {
   const [inited, setInited] = useState<boolean>(false)
   // in mobile, show sidebar by click button
   const [isShowSidebar, { setTrue: showSidebar, setFalse: hideSidebar }] = useBoolean(false)
-  const [visionConfig, setVisionConfig] = useState<VisionSettings | undefined>({
-    enabled: false,
-    number_limits: 2,
-    detail: Resolution.low,
-    transfer_methods: [TransferMethod.local_file],
-  })
+  const [visionConfig, setVisionConfig] = useState<VisionSettings | undefined>(DEFAULT_VISION_CONFIG)
   const [fileConfig, setFileConfig] = useState<FileUpload | undefined>()
 
   useEffect(() => {
-    if (APP_INFO?.title) { document.title = `${APP_INFO.title} - Powered by Dify` }
-  }, [APP_INFO?.title])
+    setSelectedAgentAppId(getStoredSelectedAgentAppId())
+    setIsAgentSelectionReady(true)
+  }, [])
+
+  useEffect(() => {
+    const title = selectedAgent?.name || APP_INFO?.title
+
+    if (title) { document.title = `${title} - Powered by Dify` }
+  }, [selectedAgent?.name])
 
   // onData change thought (the produce obj). https://github.com/immerjs/immer/issues/576
   useEffect(() => {
@@ -155,6 +173,20 @@ const Main: FC<IMainProps> = () => {
   }
   useEffect(handleConversationSwitch, [currConversationId, inited])
 
+  const handleAgentChange = (nextAgentAppId: string) => {
+    if (!nextAgentAppId || nextAgentAppId === currentAppId) {
+      hideSidebar()
+      return
+    }
+
+    abortController?.abort()
+    setAbortController(null)
+    setRespondingFalse()
+    setStoredSelectedAgentAppId(nextAgentAppId)
+    setSelectedAgentAppId(nextAgentAppId)
+    hideSidebar()
+  }
+
   const handleConversationIdChange = (id: string) => {
     if (id === '-1') {
       createNewChat()
@@ -164,7 +196,7 @@ const Main: FC<IMainProps> = () => {
       setConversationIdChangeBecauseOfNew(false)
     }
     // trigger handleConversationSwitch
-    setCurrConversationId(id, APP_ID)
+    setCurrConversationId(id, currentAppId)
     hideSidebar()
   }
 
@@ -222,11 +254,27 @@ const Main: FC<IMainProps> = () => {
 
   // init
   useEffect(() => {
+    if (!isAgentSelectionReady) { return }
+
     if (!hasSetAppConfig) {
       setAppUnavailable(true)
+      setPromptConfig(null)
       return
     }
-    (async () => {
+
+    setAppUnavailable(false)
+    setIsUnknownReason(false)
+    setInited(false)
+    setPromptConfig(null)
+    setConversationList([])
+    setChatList([])
+    setFileConfig(undefined)
+    setVisionConfig(DEFAULT_VISION_CONFIG)
+    setConversationIdChangeBecauseOfNew(false)
+    setChatNotStarted()
+    setCurrConversationId('-1', currentAppId, false)
+
+    void (async () => {
       try {
         const [conversationData, appParams] = await Promise.all([fetchConversations(), fetchAppParams()])
         // handle current conversation id
@@ -234,9 +282,8 @@ const Main: FC<IMainProps> = () => {
         if (error) {
           Toast.notify({ type: 'error', message: error })
           throw new Error(error)
-          return
         }
-        const _conversationId = getConversationIdFromStorage(APP_ID)
+        const _conversationId = getConversationIdFromStorage(currentAppId)
         const currentConversation = conversations.find(item => item.id === _conversationId)
         const isNotNewConversation = !!currentConversation
 
@@ -276,7 +323,7 @@ const Main: FC<IMainProps> = () => {
         })
         setConversationList(conversations as ConversationItem[])
 
-        if (isNotNewConversation) { setCurrConversationId(_conversationId, APP_ID, false) }
+        if (isNotNewConversation) { setCurrConversationId(_conversationId, currentAppId, false) }
 
         setInited(true)
       }
@@ -290,7 +337,7 @@ const Main: FC<IMainProps> = () => {
         }
       }
     })()
-  }, [])
+  }, [currentAppId, hasSetAppConfig, isAgentSelectionReady])
 
   const [isResponding, { setTrue: setRespondingTrue, setFalse: setRespondingFalse }] = useBoolean(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
@@ -307,7 +354,7 @@ const Main: FC<IMainProps> = () => {
     let emptyRequiredInput = false
     promptConfig.prompt_variables.forEach((item) => {
       if (item.required && !currInputs[item.key])
-        emptyRequiredInput = true
+      { emptyRequiredInput = true }
     })
 
     if (emptyRequiredInput) {
@@ -473,7 +520,7 @@ const Main: FC<IMainProps> = () => {
         setConversationIdChangeBecauseOfNew(false)
         resetNewConversationInputs()
         setChatNotStarted()
-        setCurrConversationId(tempNewConversationId, APP_ID, true)
+        setCurrConversationId(tempNewConversationId, currentAppId, true)
         setRespondingFalse()
       },
       onFile(file) {
@@ -636,8 +683,22 @@ const Main: FC<IMainProps> = () => {
     notify({ type: 'success', message: t('common.api.success') })
   }
 
+  const renderAgentPanel = () => {
+    if (!hasMultipleAgents || !selectedAgent) { return null }
+
+    return (
+      <AgentPanel
+        agents={AGENT_CONFIGS}
+        currentAgentAppId={currentAppId}
+        collapsed={isAgentPanelCollapsed}
+        onToggleCollapsed={() => setIsAgentPanelCollapsed(value => !value)}
+        onSelectAgent={handleAgentChange}
+      />
+    )
+  }
+
   const renderSidebar = () => {
-    if (!APP_ID || !APP_INFO || !promptConfig) { return null }
+    if (!currentAppId || !APP_INFO || !promptConfig) { return null }
     return (
       <Sidebar
         list={conversationList}
@@ -648,24 +709,28 @@ const Main: FC<IMainProps> = () => {
     )
   }
 
-  if (appUnavailable) { return <AppUnavailable isUnknownReason={isUnknownReason} errMessage={!hasSetAppConfig ? 'Please set APP_ID and API_KEY in config/index.tsx' : ''} /> }
+  if (appUnavailable) {
+    return <AppUnavailable isUnknownReason={isUnknownReason} errMessage={!hasSetAppConfig ? 'Please set NEXT_PUBLIC_AGENT_CONFIGS or NEXT_PUBLIC_APP_ID/NEXT_PUBLIC_APP_KEY in your environment.' : ''} />
+  }
 
-  if (!APP_ID || !APP_INFO || !promptConfig) { return <Loading type='app' /> }
+  if (!isAgentSelectionReady || !currentAppId || !APP_INFO || !promptConfig) { return <Loading type='app' /> }
 
   return (
     <div className='bg-gray-100'>
       <Header
-        title={APP_INFO.title}
+        title={selectedAgent?.name || APP_INFO.title}
         isMobile={isMobile}
         onShowSideBar={showSidebar}
         onCreateNewChat={() => handleConversationIdChange('-1')}
       />
       <div className="flex rounded-t-2xl bg-white overflow-hidden">
         {/* sidebar */}
+        {!isMobile && renderAgentPanel()}
         {!isMobile && renderSidebar()}
         {isMobile && isShowSidebar && (
           <div className='fixed inset-0 z-50' style={{ backgroundColor: 'rgba(35, 56, 118, 0.2)' }} onClick={hideSidebar} >
-            <div className='inline-block' onClick={e => e.stopPropagation()}>
+            <div className='inline-flex max-w-full' onClick={e => e.stopPropagation()}>
+              {renderAgentPanel()}
               {renderSidebar()}
             </div>
           </div>

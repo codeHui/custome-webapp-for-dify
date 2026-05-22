@@ -13,6 +13,9 @@ const translation = {
     privatePromptConfigTitle: 'Param tres de la conversation',
     publicPromptConfigTitle: 'Prompt initial',
     configStatusDes: 'Avant de commencer, vous pouvez modifier les paramètres de la conversation',
+    agents: 'Agents',
+    showAgents: 'Afficher le panneau des agents',
+    hideAgents: 'Masquer le panneau des agents',
     configDisabled:
       'Les paramètres de la session précédente ont été utilisés pour cette session.',
     startChat: 'Démarrer la conversation',

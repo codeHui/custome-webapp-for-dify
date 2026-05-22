@@ -96,7 +96,7 @@ export type ChatItem = IChatItem & {
   workflowProcess?: WorkflowProcess
 }
 
-export interface ResponseHolder {}
+export interface ResponseHolder { }
 
 export interface ConversationItem {
   id: string
@@ -113,6 +113,13 @@ export interface AppInfo {
   copyright?: string
   privacy_policy?: string
   disable_session_same_site?: boolean
+}
+
+export interface AgentConfig {
+  id: string
+  name: string
+  appId: string
+  apiKey: string
 }
 
 export enum Resolution {

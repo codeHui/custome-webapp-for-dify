@@ -13,6 +13,9 @@ const translation = {
     privatePromptConfigTitle: 'Cài đặt cuộc trò chuyện',
     publicPromptConfigTitle: 'Nhắc nhở ban đầu',
     configStatusDes: 'Trước khi bắt đầu, bạn có thể chỉnh sửa cài đặt cuộc trò chuyện',
+    agents: 'Tác nhân',
+    showAgents: 'Hiện bảng tác nhân',
+    hideAgents: 'Ẩn bảng tác nhân',
     configDisabled:
       'Cài đặt của phiên trước đã được sử dụng cho phiên này.',
     startChat: 'Bắt đầu trò chuyện',

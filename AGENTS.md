@@ -34,6 +34,7 @@ Useful commands:
 
 Environment variables:
 
+- `NEXT_PUBLIC_AGENT_CONFIGS`
 - `NEXT_PUBLIC_APP_ID`
 - `NEXT_PUBLIC_APP_KEY`
 - `NEXT_PUBLIC_API_URL`
@@ -64,7 +65,7 @@ This is primarily a client-driven application. Most business state lives in the 
 
 The backend in this repository is a thin Next.js BFF layer, not a standalone business backend.
 
-- `app/api/utils/common.ts` creates the Dify `ChatClient`, derives a stable per-session user ID in the form `user_<APP_ID>:<session_id>`, and applies the session cookie.
+- `app/api/utils/common.ts` resolves the selected Dify app per request, creates the matching `ChatClient`, derives a stable per-session user ID in the form `user_<selected_app_id>:<session_id>`, and applies the session cookie.
 - Route handlers translate browser requests into Dify API calls and return the upstream result with minimal transformation.
 
 Current route surface:

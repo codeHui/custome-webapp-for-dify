@@ -1,7 +1,8 @@
-import { API_PREFIX } from '@/config'
+import { AGENT_ID_HEADER_NAME, API_PREFIX } from '@/config'
 import Toast from '@/app/components/base/toast'
 import type { AnnotationReply, MessageEnd, MessageReplace, ThoughtItem } from '@/app/components/chat/type'
 import type { VisionFile } from '@/types/app'
+import { getStoredSelectedAgentAppId } from '@/utils/agent'
 
 const TIME_OUT = 100000
 
@@ -20,6 +21,32 @@ const baseOptions = {
     'Content-Type': ContentType.json,
   }),
   redirect: 'follow',
+}
+
+const buildRequestHeaders = (headers?: HeadersInit) => {
+  const requestHeaders = new Headers(baseOptions.headers)
+
+  if (headers) {
+    new Headers(headers).forEach((value, key) => {
+      requestHeaders.set(key, value)
+    })
+  }
+
+  const selectedAgentAppId = getStoredSelectedAgentAppId()
+
+  if (selectedAgentAppId) {
+    requestHeaders.set(AGENT_ID_HEADER_NAME, selectedAgentAppId)
+  }
+
+  return requestHeaders
+}
+
+const createRequestOptions = (fetchOptions: any) => {
+  return {
+    ...baseOptions,
+    ...fetchOptions,
+    headers: buildRequestHeaders(fetchOptions?.headers),
+  }
 }
 
 export interface WorkflowStartedResponse {
@@ -247,7 +274,7 @@ const handleStream = (
 }
 
 const baseFetch = (url: string, fetchOptions: any, { needAllResponseContent }: IOtherOptions) => {
-  const options = Object.assign({}, baseOptions, fetchOptions)
+  const options = createRequestOptions(fetchOptions)
 
   const urlPrefix = API_PREFIX
 
@@ -327,14 +354,20 @@ const baseFetch = (url: string, fetchOptions: any, { needAllResponseContent }: I
 export const upload = (fetchOptions: any): Promise<any> => {
   const urlPrefix = API_PREFIX
   const urlWithPrefix = `${urlPrefix}/file-upload`
+  const uploadHeaders = Object.fromEntries(buildRequestHeaders(fetchOptions?.headers).entries())
   const defaultOptions = {
     method: 'POST',
     url: `${urlWithPrefix}`,
     data: {},
+    headers: uploadHeaders,
   }
   const options = {
     ...defaultOptions,
     ...fetchOptions,
+    headers: {
+      ...uploadHeaders,
+      ...(fetchOptions?.headers || {}),
+    },
   }
   return new Promise((resolve, reject) => {
     const xhr = options.xhr
@@ -370,9 +403,9 @@ export const ssePost = (
     onError,
   }: IOtherOptions,
 ) => {
-  const options = Object.assign({}, baseOptions, {
+  const options = createRequestOptions(Object.assign({}, {
     method: 'POST',
-  }, fetchOptions)
+  }, fetchOptions))
 
   const urlPrefix = API_PREFIX
   const urlWithPrefix = `${urlPrefix}${url.startsWith('/') ? url : `/${url}`}`

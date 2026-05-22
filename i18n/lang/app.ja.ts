@@ -13,6 +13,9 @@ const translation = {
     privatePromptConfigTitle: '会話設定',
     publicPromptConfigTitle: '初期プロンプト',
     configStatusDes: '開始前に、会話設定を変更できます',
+    agents: 'エージェント',
+    showAgents: 'エージェントパネルを表示',
+    hideAgents: 'エージェントパネルを隠す',
     configDisabled:
       '前回のセッション設定がこのセッションで使用されています。',
     startChat: '開始',
