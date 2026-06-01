@@ -29,12 +29,42 @@ const redirectToLogin = () => {
   globalThis.location.href = '/login'
 }
 
-const notifyErrorFromResponse = (response: Response, fallbackMessage: string) => {
-  void response.clone().json().then((data: any) => {
-    Toast.notify({ type: 'error', message: data?.message || fallbackMessage })
-  }).catch(() => {
-    Toast.notify({ type: 'error', message: fallbackMessage })
-  })
+class ResponseError extends Error {
+  status: number
+  code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'ResponseError'
+    this.status = status
+    this.code = code
+  }
+}
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) { return error.message }
+  if (typeof error === 'string') { return error }
+
+  return `${error}`
+}
+
+const getResponseFallbackMessage = (status: number) => {
+  if (status === 401) { return 'Authentication is required.' }
+  if (status === 403) { return 'You do not have permission to access this agent.' }
+
+  return 'Server Error'
+}
+
+const createErrorFromResponse = async (response: Response) => {
+  const fallbackMessage = getResponseFallbackMessage(response.status)
+
+  try {
+    const data = await response.clone().json()
+    return new ResponseError(data?.message || fallbackMessage, response.status, data?.code)
+  }
+  catch {
+    return new ResponseError(fallbackMessage, response.status)
+  }
 }
 
 const buildRequestHeaders = (headers?: HeadersInit) => {
@@ -215,7 +245,7 @@ const handleStream = (
             try {
               bufferObj = JSON.parse(message.substring(6)) as Record<string, any>// remove data: and parse as json
             }
-            catch (e) {
+            catch {
               // mute handle message cut off
               onData('', isFirstMessage, {
                 conversationId: bufferObj?.conversation_id,
@@ -319,30 +349,22 @@ const baseFetch = (url: string, fetchOptions: any, { needAllResponseContent }: I
     }),
     new Promise((resolve, reject) => {
       globalThis.fetch(urlWithPrefix, options)
-        .then((res: any) => {
+        .then(async (res: any) => {
           const resClone = res.clone()
           // Error handler
           if (!/^(2|3)\d{2}$/.test(res.status)) {
             try {
-              switch (res.status) {
-                case 401: {
-                  notifyErrorFromResponse(resClone, 'Authentication is required.')
-                  redirectToLogin()
-                  break
-                }
-                case 403: {
-                  notifyErrorFromResponse(resClone, 'You do not have permission to access this agent.')
-                  break
-                }
-                default:
-                  notifyErrorFromResponse(resClone, 'Server Error')
-              }
+              const error = await createErrorFromResponse(resClone)
+              Toast.notify({ type: 'error', message: error.message })
+              if (res.status === 401) { redirectToLogin() }
+              reject(error)
             }
             catch (e) {
               Toast.notify({ type: 'error', message: `${e}` })
+              reject(e)
             }
 
-            return Promise.reject(resClone)
+            return
           }
 
           // handle delete api. Delete api not return content.
@@ -357,8 +379,9 @@ const baseFetch = (url: string, fetchOptions: any, { needAllResponseContent }: I
           resolve(needAllResponseContent ? resClone : data)
         })
         .catch((err) => {
-          Toast.notify({ type: 'error', message: err })
-          reject(err)
+          const message = getErrorMessage(err)
+          Toast.notify({ type: 'error', message })
+          reject(err instanceof Error ? err : new Error(message))
         })
     }),
   ])
@@ -430,11 +453,12 @@ export const ssePost = (
   if (body) { options.body = JSON.stringify(body) }
 
   globalThis.fetch(urlWithPrefix, options)
-    .then((res: any) => {
+    .then(async (res: any) => {
       if (!/^(2|3)\d{2}$/.test(res.status)) {
-        notifyErrorFromResponse(res, 'Server Error')
+        const error = await createErrorFromResponse(res)
+        Toast.notify({ type: 'error', message: error.message })
         if (res.status === 401) { redirectToLogin() }
-        onError?.('Server Error')
+        onError?.(error.message, error.code)
         return
       }
       return handleStream(res, (str: string, isFirstMessage: boolean, moreInfo: IOnDataMoreInfo) => {
@@ -448,8 +472,9 @@ export const ssePost = (
       }, onThought, onMessageEnd, onMessageReplace, onFile, onWorkflowStarted, onWorkflowFinished, onNodeStarted, onNodeFinished)
     })
     .catch((e) => {
-      Toast.notify({ type: 'error', message: e })
-      onError?.(e)
+      const message = getErrorMessage(e)
+      Toast.notify({ type: 'error', message })
+      onError?.(message)
     })
 }
 

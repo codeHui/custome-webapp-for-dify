@@ -14,6 +14,25 @@ import { DEFAULT_VALUE_MAX_LEN } from '@/config'
 // regex to match the {{}} and replace it with a span
 const regex = /\{\{([^}]+)\}\}/g
 
+const getDefaultInputValue = (item: PromptConfig['prompt_variables'][number]) => {
+  return item.default ?? ''
+}
+
+const normalizeInputs = (promptConfig: PromptConfig, sourceInputs?: Record<string, any> | null) => {
+  return promptConfig.prompt_variables.reduce<Record<string, any>>((res, item) => {
+    res[item.key] = sourceInputs?.[item.key] ?? getDefaultInputValue(item)
+    return res
+  }, {})
+}
+
+const isEmptyInputValue = (value: any) => {
+  if (value === undefined || value === null) { return true }
+  if (typeof value === 'string') { return value.trim() === '' }
+  if (Array.isArray(value)) { return value.length === 0 }
+
+  return false
+}
+
 export interface IWelcomeProps {
   conversationName: string
   hasSetInputs: boolean
@@ -40,31 +59,10 @@ const Welcome: FC<IWelcomeProps> = ({
   const { t } = useTranslation()
   const hasVar = promptConfig.prompt_variables.length > 0
   const [isFold, setIsFold] = useState<boolean>(true)
-  const [inputs, setInputs] = useState<Record<string, any>>((() => {
-    if (hasSetInputs) { return savedInputs }
-
-    const res: Record<string, any> = {}
-    if (promptConfig) {
-      promptConfig.prompt_variables.forEach((item) => {
-        res[item.key] = ''
-      })
-    }
-    return res
-  })())
+  const [inputs, setInputs] = useState<Record<string, any>>(() => normalizeInputs(promptConfig, hasSetInputs ? savedInputs : null))
   useEffect(() => {
-    if (!savedInputs) {
-      const res: Record<string, any> = {}
-      if (promptConfig) {
-        promptConfig.prompt_variables.forEach((item) => {
-          res[item.key] = ''
-        })
-      }
-      setInputs(res)
-    }
-    else {
-      setInputs(savedInputs)
-    }
-  }, [savedInputs])
+    setInputs(normalizeInputs(promptConfig, savedInputs))
+  }, [promptConfig, savedInputs])
 
   const highLightPromoptTemplate = (() => {
     if (!promptConfig) { return '' }
@@ -126,8 +124,8 @@ const Welcome: FC<IWelcomeProps> = ({
                 type="number"
                 className="block w-full p-2 text-gray-900 border border-gray-300 rounded-lg bg-gray-50 sm:text-xs focus:ring-blue-500 focus:border-blue-500 "
                 placeholder={`${item.name}${!item.required ? `(${t('appDebug.variableTable.optional')})` : ''}`}
-                value={inputs[item.key]}
-                onChange={(e) => { onInputsChange({ ...inputs, [item.key]: e.target.value }) }}
+                value={inputs[item.key] ?? ''}
+                onChange={(e) => { setInputs({ ...inputs, [item.key]: e.target.value }) }}
               />
             )}
 
@@ -172,36 +170,32 @@ const Welcome: FC<IWelcomeProps> = ({
   }
 
   const canChat = () => {
-    const vars = promptConfig?.prompt_variables ?? [];
+    const vars = promptConfig?.prompt_variables ?? []
 
-    const hasEmptyRequired = vars.some(v => {
-      const isRequired = v?.required ?? true;
-      if (!isRequired) return false;
+    const hasEmptyRequired = vars.some((v) => {
+      const isRequired = v?.required ?? true
+      if (!isRequired) { return false }
 
-      const val = inputs?.[v.key];
-
-      if (typeof val === 'string') return val.trim() === '';
-
-      return val === undefined || val === null;
-    });
+      return isEmptyInputValue(inputs?.[v.key])
+    })
 
     if (hasEmptyRequired) {
-      logError(t('app.errorMessage.valueOfVarRequired'));
-      return false;
+      logError(t('app.errorMessage.valueOfVarRequired'))
+      return false
     }
 
-    return true;
-  };
+    return true
+  }
 
   const handleChat = () => {
     if (!canChat()) { return }
 
-    Object.keys(inputs).forEach((key) => {
-      if (!inputs[key])
-        delete inputs[key]
-    })
+    const nextInputs = Object.entries(inputs).reduce<Record<string, any>>((res, [key, value]) => {
+      if (!isEmptyInputValue(value)) { res[key] = value }
+      return res
+    }, {})
 
-    onStartChat(inputs)
+    onStartChat(nextInputs)
   }
 
   const renderNoVarPanel = () => {
