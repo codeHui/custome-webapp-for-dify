@@ -1,37 +1,53 @@
-# Conversation Web App Template
 
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# RBAC (Role based access control) for Dify
+RBAC效果：如下图左边，admin登錄可以看到所有APP, 而user登錄只能看到为其配置的部分APP(配置在[rbac.json](./rbac.json))
+![dify_rbac](readme/images/dify_rbac.jpg)
 
-The app now uses a local JWT-authenticated backend proxy for Dify. The browser only talks to the Next.js API routes, and agent API keys stay on the server.
+# Software Architecture
+This project is forked from the Dify official project: [`langgenius/webapp-conversation`](https://github.com/langgenius/webapp-conversation) (a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app))
 
-## Config App
 
+RBAC的实现流程，请参考： [rbac_flow_guide](readme/rbac_flow_guide_cn.md)
+你可以compare  `backup/webapp-conversation_original_code_202606` 和`main` 分支， check 该项目对原始项目做了哪些代码修改。  
+
+
+# Config App
+
+
+## Original  [`langgenius/webapp-conversation`](https://github.com/langgenius/webapp-conversation) Config
 Create a file named `.env.local` in the current directory and copy the contents from `.env.example`. Setting the following content:
 
 ```
 # APP URL: This is the API's base URL. If you're using the Dify cloud service, set it to: https://api.dify.ai/v1.
-NEXT_PUBLIC_API_URL=
+NEXT_PUBLIC_API_URL=http://127.0.0.1/v1
 
 # Multi-agent configuration. Each item needs a display name, appId, and apiKey.
+# appId and apiKey below are from Dify backend after you create a APP:
 # The appId is the unique identifier from the Dify app URL.
 # The apiKey is generated from the app's API Access page.
 NEXT_PUBLIC_AGENT_CONFIGS=[{"name":"Agent 1","appId":"your-first-app-id","apiKey":"app-your-first-key"},{"name":"Agent 2","appId":"your-second-app-id","apiKey":"app-your-second-key"}]
 
-# Optional but recommended in production. Used to sign the local JWT auth cookie.
+# Used to sign the JWT Token for login.
 JWT_SECRET=replace-this-in-production
 ```
 
-Single-agent mode is still supported as a fallback:
 
-```dotenv
-NEXT_PUBLIC_API_URL=https://api.dify.ai/v1
-NEXT_PUBLIC_APP_ID=your-app-id
-NEXT_PUBLIC_APP_KEY=app-your-app-key
+Config more in `config/index.ts` file:
+
+```js
+export const APP_INFO: AppInfo = {
+  title: 'Chat APP',
+  description: '',
+  copyright: '',
+  privacy_policy: '',
+  default_language: 'zh-Hans'
+}
+
+export const isShowPrompt = true
+export const promptTemplate = ''
 ```
 
-When multiple agents are configured, the app renders a collapsible panel on the far left so users can switch between agents. Conversation continuity remains scoped by Dify app ID, and the visible agent list is filtered by RBAC.
-
-## RBAC
+## RBAC Config
 
 Edit [rbac.json](./rbac.json) directly to manage roles and accounts. The backend reloads this file at request time.
 
@@ -53,30 +69,17 @@ Edit [rbac.json](./rbac.json) directly to manage roles and accounts. The backend
 }
 ```
 
-Notes:
+RBAC Notes:
+- `roles.<role>.agents`(e.g. "agent-1", "agent-2") are defined in `NEXT_PUBLIC_AGENT_CONFIGS`
 
+
+Login Notes:
 - `defaultPassword` is the shared password for every configured account.
-- `roles.<role>.agents` can reference an agent by generated ID, agent name, or Dify `appId`.
-- If you do not provide an explicit `id` in `NEXT_PUBLIC_AGENT_CONFIGS`, agent IDs are generated from the agent name. For the default example above, `Agent 1 -> agent-1` and `Agent 2 -> agent-2`.
 - The default accounts are `admin / 123456` and `user / 123456`.
 - The backend also accepts `Authorization: Bearer <jwt>` headers, but the built-in login flow stores the JWT in an HTTP-only cookie.
 
-Config more in `config/index.ts` file:
 
-```js
-export const APP_INFO: AppInfo = {
-  title: 'Chat APP',
-  description: '',
-  copyright: '',
-  privacy_policy: '',
-  default_language: 'zh-Hans'
-}
-
-export const isShowPrompt = true
-export const promptTemplate = ''
-```
-
-## Getting Started
+# Getting Started
 
 First, install dependencies:
 
@@ -100,29 +103,6 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Using Docker
 
-```
-docker build . -t <DOCKER_HUB_REPO>/webapp-conversation:latest
-# now you can access it in port 3000
-docker run -p 3000:3000 <DOCKER_HUB_REPO>/webapp-conversation:latest
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-> ⚠️ If you are using [Vercel Hobby](https://vercel.com/pricing), your message will be truncated due to the limitation of vercel.
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
